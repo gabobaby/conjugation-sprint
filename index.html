@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0e1116">
+<title>Conjugation Drill</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --surface: #171c24;
+    --line: #262d38;
+    --ink: #f5f2e9;
+    --muted: #8a93a3;
+    --accent: #ffb454;
+    --ok: #7adfa0;
+    --miss: #ff6b6b;
+    --core: #6db3ff;
+    --radius: 14px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: max(14px, env(safe-area-inset-top)) 18px max(14px, env(safe-area-inset-bottom));
+    user-select: none;
+  }
+
+  /* ---- header / tabs ---- */
+  header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; }
+  header h1 {
+    font-size: 13px; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .tabs { display: inline-flex; background: var(--surface); border-radius: 999px; padding: 3px; }
+  .tabs button {
+    border: none; background: transparent; color: var(--muted);
+    font-size: 12px; font-weight: 700; padding: 6px 14px;
+    border-radius: 999px; cursor: pointer;
+  }
+  .tabs button.active { background: var(--accent); color: #0e1116; }
+  .tabs button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  /* ---- settings row ---- */
+  .setrow { display: flex; gap: 8px; padding-bottom: 14px; }
+  .chipbtn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 12px;
+    font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer;
+  }
+  .chipbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .chipbtn .dot { width: 10px; height: 10px; border-radius: 50%; background: #3a4250; }
+  .chipbtn.on { color: var(--ink); border-color: var(--accent); }
+  .chipbtn.on .dot { background: var(--accent); }
+
+  .verbpanel {
+    display: none; flex-wrap: wrap; gap: 8px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 12px; margin-bottom: 14px;
+  }
+  .verbpanel.open { display: flex; }
+  .verbpanel .vchip {
+    border: 1px solid var(--line); background: transparent; color: var(--muted);
+    border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .verbpanel .vchip.on { background: #2a2417; border-color: var(--accent); color: var(--accent); }
+  .verbpanel .vchip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .verbpanel .note { flex-basis: 100%; font-size: 11px; color: var(--muted); }
+
+  /* ---- stat strip ---- */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding-bottom: 18px; }
+  .stat { background: var(--surface); border-radius: 10px; padding: 8px 6px; text-align: center; }
+  .stat .v { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 16px; font-weight: 700; }
+  .stat .l { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+
+  /* ---- drill card ---- */
+  main { flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center; gap: 18px; min-height: 0; }
+  .tense-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+  .tense-tag.review { color: var(--miss); }
+  .prompt {
+    font-size: clamp(30px, 9vw, 44px); font-weight: 800; line-height: 1.15;
+    min-height: 2.3em; display: flex; align-items: center; justify-content: center;
+  }
+  .clock {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(44px, 14vw, 64px); font-weight: 700;
+    font-variant-numeric: tabular-nums; color: var(--muted); transition: color 0.2s;
+  }
+  .clock.warn { color: var(--accent); }
+  .clock.over { color: var(--miss); }
+  .answer { font-size: clamp(26px, 8vw, 38px); font-weight: 800; color: var(--ok); min-height: 1.3em; visibility: hidden; }
+  .answer.shown { visibility: visible; }
+  .hint { font-size: 12px; color: var(--muted); min-height: 1.2em; }
+
+  /* ---- controls ---- */
+  .controls { padding-top: 10px; }
+  button.big {
+    width: 100%; border: none; border-radius: var(--radius); padding: 20px;
+    font-size: 18px; font-weight: 800; cursor: pointer; color: #0e1116; background: var(--accent);
+  }
+  button.big:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  button.big:active { transform: scale(0.985); }
+  .judge { display: none; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .judge button {
+    border: none; border-radius: var(--radius); padding: 20px 10px;
+    font-size: 17px; font-weight: 800; cursor: pointer; color: #0e1116;
+  }
+  .judge button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .judge .yes { background: var(--ok); }
+  .judge .no  { background: var(--miss); }
+  .keyhint { text-align: center; font-size: 10px; color: #4a5261; padding-top: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+  @media (hover: none) { .keyhint { display: none; } }
+
+  /* ---- progress tab ---- */
+  #progress { display: none; flex: 1; overflow-y: auto; }
+  #progress.active { display: block; }
+  #drillview.hidden { display: none; }
+  .bigstreak { text-align: center; padding: 10px 0 20px; }
+  .bigstreak .n {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 56px; font-weight: 800; color: var(--accent); line-height: 1;
+  }
+  .bigstreak .l { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+  .chartblock { background: var(--surface); border-radius: var(--radius); padding: 14px 12px 8px; margin-bottom: 14px; }
+  .chartblock h2 { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .chartblock svg { width: 100%; height: auto; display: block; }
+  .legend { display: flex; gap: 14px; padding: 6px 2px 4px; font-size: 10px; color: var(--muted); }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+  .legend .lg-all::before { background: var(--ok); }
+  .legend .lg-core::before { background: var(--core); }
+  .legend .lg-mark::before { background: var(--accent); height: 8px; width: 3px; }
+  .verbtable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .verbtable td { padding: 6px 4px; border-top: 1px solid var(--line); }
+  .verbtable td.num { font-family: ui-monospace, Menlo, Consolas, monospace; text-align: right; color: var(--muted); }
+  .bar { height: 6px; border-radius: 3px; background: #2a3140; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--ok); border-radius: 3px; }
+  .empty { text-align: center; color: var(--muted); font-size: 14px; padding: 40px 20px; }
+  .storagewarn { font-size: 11px; color: var(--miss); text-align: center; padding-bottom: 8px; display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+    button.big:active { transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Conjugation drill</h1>
+  <div class="tabs" role="tablist">
+    <button id="tabDrill" class="active" role="tab" aria-selected="true">Drill</button>
+    <button id="tabProg" role="tab" aria-selected="false">Progress</button>
+  </div>
+</header>
+
+<div class="storagewarn" id="storageWarn">Storage unavailable here — history won't persist in this preview (it will on your phone).</div>
+
+<!-- ================= DRILL VIEW ================= -->
+<div id="drillview">
+  <div class="setrow">
+    <button class="chipbtn" id="tenseToggle" role="switch" aria-checked="false"><span class="dot"></span> Preterite</button>
+    <button class="chipbtn" id="verbBtn" aria-expanded="false"><span class="dot"></span> Verbs (<span id="verbCount">5</span>)</button>
+  </div>
+  <div class="verbpanel" id="verbPanel"></div>
+
+  <div class="stats">
+    <div class="stat"><div class="v" id="sCards">0</div><div class="l">Cards</div></div>
+    <div class="stat"><div class="v" id="sAcc">–</div><div class="l">Accuracy</div></div>
+    <div class="stat"><div class="v" id="sAvg">–</div><div class="l">Avg time</div></div>
+    <div class="stat"><div class="v" id="sStreak">0</div><div class="l">Streak</div></div>
+  </div>
+
+  <main>
+    <div class="tense-tag" id="tenseTag">Present</div>
+    <div class="prompt" id="prompt">Ready?</div>
+    <div class="clock" id="clock">0.0</div>
+    <div class="answer" id="answer">&nbsp;</div>
+    <div class="hint" id="hint"></div>
+  </main>
+
+  <div class="controls">
+    <button class="big" id="mainBtn">Start</button>
+    <div class="judge" id="judge">
+      <button class="yes" id="btnYes">Got it</button>
+      <button class="no" id="btnNo">Missed it</button>
+    </div>
+    <div class="keyhint">Space = reveal · 1 = got it · 2 = missed</div>
+  </div>
+</div>
+
+<!-- ================= PROGRESS VIEW ================= -->
+<div id="progress">
+  <div class="bigstreak">
+    <div class="n" id="pStreak">0</div>
+    <div class="l">day streak</div>
+  </div>
+  <div id="charts"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ================= verb bank ================= */
+  // obj: "io" = indirect only, "io+lo" = indirect + it, "do" = direct
+  var VERBS = {
+    decir:     { en: ["tell","tells","told"],     pres:["digo","dices","dice","decimos","dicen"],           pret:["dije","dijiste","dijo","dijimos","dijeron"],                 obj:"io",    core:true },
+    dar:       { en: ["give","gives","gave"],     pres:["doy","das","da","damos","dan"],                    pret:["di","diste","dio","dimos","dieron"],                          obj:"io+lo", core:true },
+    pedir:     { en: ["ask","asks","asked"],      pres:["pido","pides","pide","pedimos","piden"],           pret:["pedí","pediste","pidió","pedimos","pidieron"],               obj:"io",    core:true },
+    necesitar: { en: ["need","needs","needed"],   pres:["necesito","necesitas","necesita","necesitamos","necesitan"], pret:["necesité","necesitaste","necesitó","necesitamos","necesitaron"], obj:"do", core:true },
+    ver:       { en: ["see","sees","saw"],        pres:["veo","ves","ve","vemos","ven"],                    pret:["vi","viste","vio","vimos","vieron"],                          obj:"do",    core:true },
+    traer:     { en: ["bring","brings","brought"],pres:["traigo","traes","trae","traemos","traen"],         pret:["traje","trajiste","trajo","trajimos","trajeron"],            obj:"io+lo" },
+    llevar:    { en: ["take","takes","took"],     pres:["llevo","llevas","lleva","llevamos","llevan"],      pret:["llevé","llevaste","llevó","llevamos","llevaron"],            obj:"io+lo" },
+    mandar:    { en: ["send","sends","sent"],     pres:["mando","mandas","manda","mandamos","mandan"],      pret:["mandé","mandaste","mandó","mandamos","mandaron"],            obj:"io+lo" },
+    llamar:    { en: ["call","calls","called"],   pres:["llamo","llamas","llama","llamamos","llaman"],      pret:["llamé","llamaste","llamó","llamamos","llamaron"],            obj:"do" },
+    ayudar:    { en: ["help","helps","helped"],   pres:["ayudo","ayudas","ayuda","ayudamos","ayudan"],      pret:["ayudé","ayudaste","ayudó","ayudamos","ayudaron"],            obj:"do" }
+  };
+  var CORE = Object.keys(VERBS).filter(function (k) { return VERBS[k].core; });
+
+  var SUBJECTS = [
+    { en:"I",    idx:0, third:false },
+    { en:"You",  idx:1, third:false },
+    { en:"He",   idx:2, third:true  },
+    { en:"She",  idx:2, third:true  },
+    { en:"We",   idx:3, third:false },
+    { en:"They", idx:4, third:true  }
+  ];
+  var DIRECT_OBJ = [
+    { en:"me", es:"me", p:0 }, { en:"you", es:"te", p:1 }, { en:"him", es:"lo", p:-1 },
+    { en:"her", es:"la", p:-1 }, { en:"us", es:"nos", p:3 }, { en:"them", es:"los", p:-1 }
+  ];
+  var INDIRECT_OBJ = [
+    { en:"me", es:"me", p:0 }, { en:"you", es:"te", p:1 }, { en:"him", es:"le", p:-1 },
+    { en:"her", es:"le", p:-1 }, { en:"us", es:"nos", p:3 }, { en:"them", es:"les", p:-1 }
+  ];
+
+  /* ================= storage ================= */
+  var store = {
+    ok: true,
+    get: function (k, fallback) {
+      try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : fallback; }
+      catch (e) { this.ok = false; return fallback; }
+    },
+    set: function (k, v) {
+      try { localStorage.setItem(k, JSON.stringify(v)); }
+      catch (e) { this.ok = false; }
+    }
+  };
+  var KEY_DAYS = "drillv2.days", KEY_SET = "drillv2.settings";
+
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  }
+
+  var days = store.get(KEY_DAYS, {});
+  var settings = store.get(KEY_SET, { verbs: CORE.slice(), pret: false });
+  // sanity: at least 2 valid verbs
+  settings.verbs = settings.verbs.filter(function (v) { return VERBS[v]; });
+  if (settings.verbs.length < 2) settings.verbs = CORE.slice();
+
+  if (!store.ok) document.getElementById("storageWarn").style.display = "block";
+
+  function saveDay() { store.set(KEY_DAYS, days); }
+  function saveSettings() { store.set(KEY_SET, settings); }
+
+  function dayRecord() {
+    var t = todayStr();
+    if (!days[t]) days[t] = { agg: {}, verbs: settings.verbs.slice(), pret: settings.pret };
+    // keep the day's settings snapshot at "most difficulty seen today"
+    var d = days[t];
+    settings.verbs.forEach(function (v) { if (d.verbs.indexOf(v) < 0) d.verbs.push(v); });
+    if (settings.pret) d.pret = true;
+    return d;
+  }
+
+  function logCard(verb, tense, gotIt, ms) {
+    var d = dayRecord();
+    var key = verb + "|" + tense;
+    if (!d.agg[key]) d.agg[key] = [0, 0, 0];   // [n, correct, timeSumMs on correct]
+    d.agg[key][0]++;
+    if (gotIt) { d.agg[key][1]++; d.agg[key][2] += Math.round(ms); }
+    saveDay();
+  }
+
+  /* ================= card generation ================= */
+  function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  function makeCard() {
+    var verbKey = rand(settings.verbs);
+    var v = VERBS[verbKey];
+    var subj = rand(SUBJECTS);
+    var pool = (v.obj === "do") ? DIRECT_OBJ : INDIRECT_OBJ;
+    var obj;
+    do { obj = rand(pool); } while (obj.p === subj.idx ||
+      (subj.idx === 0 && obj.p === 3) || (subj.idx === 3 && obj.p === 0));
+
+    var tense = (settings.pret && Math.random() < 0.5) ? "pret" : "pres";
+    var enVerb = (tense === "pret") ? v.en[2] : (subj.third && subj.en !== "They") ? v.en[1] : v.en[0];
+    var enPrompt = (v.obj === "io+lo")
+      ? subj.en + " " + enVerb + " it to " + obj.en
+      : subj.en + " " + enVerb + " " + obj.en;
+
+    var conj = v[tense][subj.idx];
+    var es, hint = "";
+    if (v.obj === "io+lo") {
+      var io = obj.es;
+      if (io === "le" || io === "les") { io = "se"; hint = "le/les + lo → se lo"; }
+      es = io + " lo " + conj;
+    } else {
+      es = obj.es + " " + conj;
+      if (obj.es === "lo") hint = "'le' also common in Spain (leísmo)";
+    }
+    return { key: verbKey + "|" + subj.en + "|" + obj.en + "|" + tense,
+             verb: verbKey, tense: tense, prompt: enPrompt, answer: es, hint: hint };
+  }
+
+  /* ================= session state ================= */
+  var state = {
+    phase: "idle", card: null, isReview: false,
+    startMs: 0, elapsedMs: 0, rafId: null,
+    cardCount: 0, correct: 0, streak: 0, timeSum: 0, timeN: 0,
+    reviewQueue: []
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var elPrompt = $("prompt"), elClock = $("clock"), elAnswer = $("answer"),
+      elHint = $("hint"), elTag = $("tenseTag"), elMain = $("mainBtn"), elJudge = $("judge");
+
+  function tick() {
+    var t = (performance.now() - state.startMs) / 1000;
+    elClock.textContent = t.toFixed(1);
+    elClock.className = "clock" + (t >= 5 ? " over" : t >= 2 ? " warn" : "");
+    state.rafId = requestAnimationFrame(tick);
+  }
+
+  function nextCard() {
+    state.isReview = false;
+    var due = -1;
+    for (var i = 0; i < state.reviewQueue.length; i++) {
+      if (state.reviewQueue[i].due <= state.cardCount) { due = i; break; }
+    }
+    if (due >= 0) {
+      state.card = state.reviewQueue.splice(due, 1)[0].card;
+      state.isReview = true;
+    } else {
+      var c;
+      do { c = makeCard(); } while (state.card && c.key === state.card.key);
+      state.card = c;
+    }
+    elPrompt.textContent = state.card.prompt;
+    elTag.textContent = (state.isReview ? "Review · " : "") + (state.card.tense === "pret" ? "Preterite" : "Present");
+    elTag.className = "tense-tag" + (state.isReview ? " review" : "");
+    elAnswer.textContent = "\u00a0";
+    elAnswer.className = "answer";
+    elHint.textContent = "";
+    elMain.textContent = "Show answer";
+    elMain.style.display = "block";
+    elJudge.style.display = "none";
+    state.phase = "timing";
+    state.startMs = performance.now();
+    state.rafId = requestAnimationFrame(tick);
+  }
+
+  function reveal() {
+    cancelAnimationFrame(state.rafId);
+    state.elapsedMs = performance.now() - state.startMs;
+    elAnswer.textContent = state.card.answer;
+    elAnswer.className = "answer shown";
+    elHint.textContent = state.card.hint;
+    elMain.style.display = "none";
+    elJudge.style.display = "grid";
+    state.phase = "judging";
+  }
+
+  function judge(gotIt) {
+    state.cardCount++;
+    if (gotIt) {
+      state.correct++; state.streak++;
+      state.timeSum += state.elapsedMs; state.timeN++;
+    } else {
+      state.streak = 0;
+      state.reviewQueue.push({ card: state.card, due: state.cardCount + 2 + Math.floor(Math.random()*2) });
+      state.reviewQueue.push({ card: state.card, due: state.cardCount + 7 + Math.floor(Math.random()*3) });
+    }
+    logCard(state.card.verb, state.card.tense, gotIt, state.elapsedMs);
+    updateSessionStats();
+    nextCard();
+  }
+
+  function updateSessionStats() {
+    $("sCards").textContent = state.cardCount;
+    $("sAcc").textContent = state.cardCount ? Math.round(100*state.correct/state.cardCount) + "%" : "–";
+    $("sAvg").textContent = state.timeN ? (state.timeSum/state.timeN/1000).toFixed(1) + "s" : "–";
+    $("sStreak").textContent = state.streak;
+  }
+
+  /* ================= settings ui ================= */
+  var elToggle = $("tenseToggle"), elVerbBtn = $("verbBtn"), elVerbPanel = $("verbPanel");
+
+  function renderSettings() {
+    elToggle.classList.toggle("on", settings.pret);
+    elToggle.setAttribute("aria-checked", String(settings.pret));
+    $("verbCount").textContent = settings.verbs.length;
+    elVerbBtn.classList.toggle("on", settings.verbs.length > CORE.length);
+    elVerbPanel.innerHTML = "";
+    Object.keys(VERBS).forEach(function (k) {
+      var b = document.createElement("button");
+      b.className = "vchip" + (settings.verbs.indexOf(k) >= 0 ? " on" : "");
+      b.textContent = k + (VERBS[k].core ? " ·" : "");
+      b.setAttribute("aria-pressed", String(settings.verbs.indexOf(k) >= 0));
+      b.addEventListener("click", function () {
+        var i = settings.verbs.indexOf(k);
+        if (i >= 0) { if (settings.verbs.length > 2) settings.verbs.splice(i, 1); }
+        else settings.verbs.push(k);
+        saveSettings(); renderSettings();
+      });
+      elVerbPanel.appendChild(b);
+    });
+    var note = document.createElement("div");
+    note.className = "note";
+    note.textContent = "· = core benchmark set (tracked separately on Progress). Minimum 2 verbs.";
+    elVerbPanel.appendChild(note);
+  }
+
+  elToggle.addEventListener("click", function () {
+    settings.pret = !settings.pret;
+    saveSettings(); renderSettings();
+  });
+  elVerbBtn.addEv
