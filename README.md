@@ -30,7 +30,7 @@ means the form isn't automatic yet.
 
 ## Usage
 
-Open `conjugation-drill-v2.html` in any browser. On Android, open the
+Open `index.html` in any browser. On Android, open the
 hosted page in Chrome and use **⋮ → Add to Home screen** for an
 app-like install that works offline.
 
