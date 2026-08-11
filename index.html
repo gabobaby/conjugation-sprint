@@ -434,4 +434,233 @@
     settings.pret = !settings.pret;
     saveSettings(); renderSettings();
   });
-  elVerbBtn.addEv
+  elVerbBtn.addEventListener("click", function () {
+    var open = elVerbPanel.classList.toggle("open");
+    elVerbBtn.setAttribute("aria-expanded", String(open));
+  });
+
+  /* ================= progress: derived metrics ================= */
+  function sortedDays() { return Object.keys(days).sort(); }
+
+  function dayMetrics(d) {
+    var all = [0,0,0], core = [0,0,0];
+    Object.keys(d.agg).forEach(function (k) {
+      var parts = k.split("|"), verb = parts[0], tense = parts[1];
+      var a = d.agg[k];
+      all[0]+=a[0]; all[1]+=a[1]; all[2]+=a[2];
+      if (CORE.indexOf(verb) >= 0 && tense === "pres") { core[0]+=a[0]; core[1]+=a[1]; core[2]+=a[2]; }
+    });
+    return {
+      acc:  all[0]  ? 100*all[1]/all[0]   : null,
+      cAcc: core[0] ? 100*core[1]/core[0] : null,
+      time:  all[1]  ? all[2]/all[1]/1000  : null,
+      cTime: core[1] ? core[2]/core[1]/1000 : null,
+      n: all[0]
+    };
+  }
+
+  function computeStreak() {
+    var ds = sortedDays();
+    if (!ds.length) return 0;
+    var streak = 0;
+    var cur = new Date();
+    // streak may start today or yesterday
+    function fmt(dt) { return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0"); }
+    if (days[fmt(cur)] === undefined) cur.setDate(cur.getDate() - 1);
+    while (days[fmt(cur)] !== undefined) { streak++; cur.setDate(cur.getDate() - 1); }
+    return streak;
+  }
+
+  function difficultyMarkers(ds) {
+    var marks = [];
+    for (var i = 1; i < ds.length; i++) {
+      var prev = days[ds[i-1]], cur = days[ds[i]];
+      var labels = [];
+      var added = cur.verbs.filter(function (v) { return prev.verbs.indexOf(v) < 0; }).length;
+      var removed = prev.verbs.filter(function (v) { return cur.verbs.indexOf(v) < 0; }).length;
+      if (added)   labels.push("+" + added + " verb" + (added > 1 ? "s" : ""));
+      if (removed) labels.push("−" + removed + " verb" + (removed > 1 ? "s" : ""));
+      if (cur.pret && !prev.pret) labels.push("pret on");
+      if (!cur.pret && prev.pret) labels.push("pret off");
+      if (labels.length) marks.push({ i: i, label: labels.join(", ") });
+    }
+    return marks;
+  }
+
+  /* ================= progress: svg charts ================= */
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs) {
+    var e = document.createElementNS(SVGNS, tag);
+    Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    return e;
+  }
+
+  // series: array of {name, color, values:[num|null per day]}
+  function lineChart(ds, series, opts) {
+    var W = 340, H = 150, padL = 34, padR = 8, padT = 10, padB = 20;
+    var svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+
+    var vals = [];
+    series.forEach(function (s) { s.values.forEach(function (v) { if (v !== null) vals.push(v); }); });
+    if (!vals.length) return svg;
+    var yMin = opts.yMin !== undefined ? opts.yMin : Math.min.apply(null, vals);
+    var yMax = opts.yMax !== undefined ? opts.yMax : Math.max.apply(null, vals);
+    if (yMax === yMin) yMax = yMin + 1;
+    var pad = (yMax - yMin) * 0.1;
+    if (opts.yMin === undefined) yMin -= pad;
+    if (opts.yMax === undefined) yMax += pad;
+
+    var n = ds.length;
+    function x(i) { return n === 1 ? (padL + (W-padL-padR)/2) : padL + (W-padL-padR) * i / (n-1); }
+    function y(v) { return padT + (H-padT-padB) * (1 - (v - yMin) / (yMax - yMin)); }
+
+    // gridlines + y labels
+    [yMin, (yMin+yMax)/2, yMax].forEach(function (gv) {
+      svg.appendChild(svgEl("line", { x1: padL, x2: W-padR, y1: y(gv), y2: y(gv), stroke: "#262d38", "stroke-width": 1 }));
+      var t = svgEl("text", { x: padL-5, y: y(gv)+3, "text-anchor": "end", "font-size": 9, fill: "#8a93a3", "font-family": "ui-monospace, Menlo, monospace" });
+      t.textContent = opts.fmt(gv);
+      svg.appendChild(t);
+    });
+
+    // difficulty markers
+    (opts.markers || []).forEach(function (m) {
+      svg.appendChild(svgEl("line", { x1: x(m.i), x2: x(m.i), y1: padT, y2: H-padB, stroke: "#ffb454", "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0.8 }));
+      var t = svgEl("text", { x: x(m.i)+3, y: padT+8, "font-size": 8, fill: "#ffb454" });
+      t.textContent = m.label;
+      svg.appendChild(t);
+    });
+
+    // x labels: first and last date
+    [[0, "start"], [n-1, "end"]].forEach(function (pair) {
+      var t = svgEl("text", { x: x(pair[0]), y: H-6, "text-anchor": pair[0] === 0 ? "start" : "end", "font-size": 9, fill: "#8a93a3", "font-family": "ui-monospace, Menlo, monospace" });
+      t.textContent = ds[pair[0]].slice(5);
+      svg.appendChild(t);
+    });
+
+    series.forEach(function (s) {
+      var dPath = "", started = false;
+      s.values.forEach(function (v, i) {
+        if (v === null) { started = false; return; }
+        dPath += (started ? " L " : " M ") + x(i).toFixed(1) + " " + y(v).toFixed(1);
+        started = true;
+      });
+      if (dPath) svg.appendChild(svgEl("path", { d: dPath, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round" }));
+      s.values.forEach(function (v, i) {
+        if (v !== null) svg.appendChild(svgEl("circle", { cx: x(i), cy: y(v), r: 2.5, fill: s.color }));
+      });
+    });
+    return svg;
+  }
+
+  function renderProgress() {
+    $("pStreak").textContent = computeStreak();
+    var wrap = $("charts");
+    wrap.innerHTML = "";
+    var ds = sortedDays();
+    if (!ds.length) {
+      var e = document.createElement("div");
+      e.className = "empty";
+      e.textContent = "No history yet. Do your first drill and check back.";
+      wrap.appendChild(e);
+      return;
+    }
+    var metrics = ds.map(function (d) { return dayMetrics(days[d]); });
+    var marks = difficultyMarkers(ds);
+
+    function block(title, chart, legendHtml) {
+      var b = document.createElement("div");
+      b.className = "chartblock";
+      var h = document.createElement("h2"); h.textContent = title; b.appendChild(h);
+      b.appendChild(chart);
+      if (legendHtml) { var l = document.createElement("div"); l.className = "legend"; l.innerHTML = legendHtml; b.appendChild(l); }
+      wrap.appendChild(b);
+    }
+
+    block("Accuracy by day",
+      lineChart(ds, [
+        { color: "#7adfa0", values: metrics.map(function (m) { return m.acc; }) },
+        { color: "#6db3ff", values: metrics.map(function (m) { return m.cAcc; }) }
+      ], { yMin: 0, yMax: 100, fmt: function (v) { return Math.round(v) + "%"; }, markers: marks }),
+      '<span class="lg-all">All cards</span><span class="lg-core">Core 5 · present</span><span class="lg-mark">Difficulty change</span>');
+
+    block("Avg response time by day (correct cards)",
+      lineChart(ds, [
+        { color: "#7adfa0", values: metrics.map(function (m) { return m.time; }) },
+        { color: "#6db3ff", values: metrics.map(function (m) { return m.cTime; }) }
+      ], { yMin: 0, fmt: function (v) { return v.toFixed(1) + "s"; }, markers: marks }),
+      '<span class="lg-all">All cards</span><span class="lg-core">Core 5 · present</span>');
+
+    block("Cards per day",
+      lineChart(ds, [
+        { color: "#ffb454", values: metrics.map(function (m) { return m.n; }) }
+      ], { yMin: 0, fmt: function (v) { return String(Math.round(v)); } }), null);
+
+    // per-verb accuracy, last 7 recorded days
+    var recent = ds.slice(-7);
+    var perVerb = {};
+    recent.forEach(function (d) {
+      Object.keys(days[d].agg).forEach(function (k) {
+        var verb = k.split("|")[0], a = days[d].agg[k];
+        if (!perVerb[verb]) perVerb[verb] = [0, 0];
+        perVerb[verb][0] += a[0]; perVerb[verb][1] += a[1];
+      });
+    });
+    var tbl = document.createElement("table");
+    tbl.className = "verbtable";
+    Object.keys(perVerb).sort(function (a, b) {
+      return (perVerb[a][1]/perVerb[a][0]) - (perVerb[b][1]/perVerb[b][0]);
+    }).forEach(function (v) {
+      var n = perVerb[v][0], c = perVerb[v][1], pct = Math.round(100*c/n);
+      var tr = document.createElement("tr");
+      tr.innerHTML = '<td style="width:90px">' + v + '</td>' +
+        '<td><div class="bar"><i style="width:' + pct + '%"></i></div></td>' +
+        '<td class="num" style="width:70px">' + pct + '% · ' + n + '</td>';
+      tbl.appendChild(tr);
+    });
+    var b = document.createElement("div");
+    b.className = "chartblock";
+    var h = document.createElement("h2"); h.textContent = "Per-verb accuracy · last 7 active days"; b.appendChild(h);
+    b.appendChild(tbl);
+    wrap.appendChild(b);
+  }
+
+  /* ================= tabs ================= */
+  var tabDrill = $("tabDrill"), tabProg = $("tabProg");
+  function showTab(prog) {
+    tabDrill.classList.toggle("active", !prog);
+    tabProg.classList.toggle("active", prog);
+    tabDrill.setAttribute("aria-selected", String(!prog));
+    tabProg.setAttribute("aria-selected", String(prog));
+    $("progress").classList.toggle("active", prog);
+    $("drillview").classList.toggle("hidden", prog);
+    if (prog) {
+      if (state.phase === "timing") { cancelAnimationFrame(state.rafId); state.phase = "idle"; elMain.textContent = "Resume"; elClock.textContent = "0.0"; elClock.className = "clock"; }
+      renderProgress();
+    }
+  }
+  tabDrill.addEventListener("click", function () { showTab(false); });
+  tabProg.addEventListener("click", function () { showTab(true); });
+
+  /* ================= main events ================= */
+  elMain.addEventListener("click", function () {
+    if (state.phase === "idle") nextCard();
+    else if (state.phase === "timing") reveal();
+  });
+  $("btnYes").addEventListener("click", function () { if (state.phase === "judging") judge(true); });
+  $("btnNo").addEventListener("click",  function () { if (state.phase === "judging") judge(false); });
+  document.addEventListener("keydown", function (e) {
+    if (e.code === "Space") {
+      e.preventDefault();
+      if (state.phase === "idle") nextCard();
+      else if (state.phase === "timing") reveal();
+    } else if (state.phase === "judging" && e.key === "1") judge(true);
+    else if (state.phase === "judging" && e.key === "2") judge(false);
+  });
+
+  renderSettings();
+  updateSessionStats();
+  $("sStreak").textContent = computeStreak() || 0;
+})();
+</script>
+</body>
+</html>
